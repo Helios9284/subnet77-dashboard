@@ -1,9 +1,11 @@
-import Image from "next/image";
+'use client';
+
+import {Total} from '../components';
 
 export default function Home() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      
-    </div>
+    <main className="flex min-h-screen flex-col items-center justify-between p-24">
+      <Total />
+    </main>
   );
 }

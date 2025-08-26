@@ -1,7 +1,7 @@
 // app/api/positions/route.js
 export async function GET() {
   try {
-    const response = await fetch('https://77.creativebuilds.io/pools', {
+    const response = await fetch('https://77.creativebuilds.io/positions', {
       next: { revalidate: 300 } // Cache for 5 minutes
     });
     

@@ -16,7 +16,7 @@ export const Total =()=> {
         setLoading(true);
         setError(null);
         
-        const response = await fetch('/api/poolinfo');
+        const response = await fetch('/api/position');
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);

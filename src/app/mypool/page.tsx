@@ -59,7 +59,7 @@ export default function Page() {
         setLoading(true);
         setError(null);
         
-        const response = await fetch('/api/poolinfo');
+        const response = await fetch('/api/position');
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -81,6 +81,16 @@ export default function Page() {
         // Auto-select first address if available
         if (addressesWithPositions.length > 0 && !selectedAddress) {
           setSelectedAddress(addressesWithPositions[0]);
+        }
+
+        const positions = poolInfo[walletAddress];
+      
+        if (positions && positions.length > 0) {
+          setSelectedPosition(positions);
+          console.log(positions)
+        } else {
+          setError('No positions found for this wallet address');
+          setSelectedPosition(null);
         }
         
       } catch (error) {
@@ -205,8 +215,8 @@ export default function Page() {
   };
 
   return(
-    <div className="p-6 max-w-6xl mx-auto bg-white">
-      <div className="mb-8">
+    <div className="p-6 max-w-6xl mx-auto py-30">
+      <div className="mb-8  text-center p-2">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Pool Position Analyzer</h1>
         <p className="text-gray-600">Enter your wallet address to view your Uniswap V3 positions</p>
       </div>
@@ -221,7 +231,7 @@ export default function Page() {
               value={walletAddress}
               onChange={(e) => setWalletAddress(e.target.value)}
               placeholder="Enter your wallet address..."
-              className="w-full text-gray-500 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full text-gray-500 px-3 py-2 border bg-gray-100 border-gray-400 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={loading}
             />
           </div>

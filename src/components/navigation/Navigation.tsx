@@ -8,7 +8,7 @@ export const Navigation = () => {
       <ul className="flex flex-col space-y-8  px-4">
         <Link href = '/' className="hover:text-blue-400 cursor-pointer" >Total</Link>
         <Link href = '/mypool' className="hover:text-blue-400 cursor-pointer" >My Pool</Link>
-        <Link href = '/' className="hover:text-blue-400 cursor-pointer" >Total Pool Weight</Link>
+        <Link href = '/poolweight' className="hover:text-blue-400 cursor-pointer" >Total Pool Weight</Link>
       </ul>
     </nav>
   );

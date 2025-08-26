@@ -92,6 +92,8 @@ export default function Page() {
           setError('No positions found for this wallet address');
           setSelectedPosition(null);
         }
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
       } catch (error) {
         console.error('Error fetching pool info:', error);

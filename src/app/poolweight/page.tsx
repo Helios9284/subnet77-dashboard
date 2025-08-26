@@ -149,19 +149,45 @@ export default function PoolWeightChart() {
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis 
                                     dataKey="name" 
-                                    angle={-45}
-                                    textAnchor="end"
+                                    angle={0}
                                     height={80}
                                 />
                                 <YAxis />
                                 <Tooltip 
                                     formatter={(value: number) => [value.toFixed(2), 'Weight']}
-                                    labelFormatter={(label) => `Pool: ${label}`}
+                                    labelFormatter={(label: number) => `Pool: ${label}`}
+                                    labelStyle={{ 
+                                        color: '#3B82F6',     
+                                        fontWeight: 'bold',
+                                        fontSize: '16px'
+                                    }}
+                                    contentStyle={{ 
+                                        backgroundColor: '#F9FAFB', 
+                                        border: '1px solid #E5E7EB',
+                                        borderRadius: '8px'
+                                    }}
+                                    itemStyle={{ 
+                                        color: '#374151'
+                                    }}
                                 />
                                 <Bar 
                                     dataKey="weight" 
                                     fill="#3B82F6"
                                     radius={[4, 4, 0, 0]}
+                                    label={(props: any) => {
+                                        const { x, y, width, value } = props;
+                                        return (
+                                            <text 
+                                                x={x + width / 2} 
+                                                y={y - 5} 
+                                                textAnchor="middle" 
+                                                fill="#374151"
+                                                fontSize="12"
+                                            >
+                                                {typeof value === 'number' ? value.toFixed(2) : value}
+                                            </text>
+                                        );
+                                    }}
                                 />
                             </BarChart>
                         </ResponsiveContainer>
@@ -171,15 +197,15 @@ export default function PoolWeightChart() {
                     <div className="bg-white p-6 rounded-lg shadow-lg">
                         <h2 className="text-2xl font-semibold mb-4 text-gray-800">Weight Share Distribution</h2>
                         <div className="flex flex-col lg:flex-row items-center">
-                            <ResponsiveContainer width="100%" height={400} className="lg:w-1/2">
-                                <PieChart>
+                            <ResponsiveContainer width="100%" height={500} className="lg:w-1/2">
+                                <PieChart >
                                     <Pie
                                         data={chartData}
                                         cx="50%"
                                         cy="50%"
-                                        labelLine={false}
+                                        labelLine={true}
                                         label={({ name, percent }) => `${name} ${percent ? (percent * 100).toFixed(1) : '0.0'}%`}
-                                        outerRadius={120}
+                                        outerRadius={200}
                                         fill="#8884d8"
                                         dataKey="weight"
                                     >
@@ -195,7 +221,9 @@ export default function PoolWeightChart() {
                             <div className="lg:w-1/2 lg:pl-6">
                                 <h3 className="text-lg font-medium text-gray-900 mb-4">Pool Details</h3>
                                 <div className="space-y-2">
-                                    {chartData.map((pool, index) => (
+                                    {chartData
+                                    .sort((a, b) => b.weight - a.weight)
+                                    .map((pool, index) => (
                                         <div key={pool.address} className="flex items-center justify-between p-2 rounded bg-gray-50">
                                             <div className="flex items-center">
                                                 <div 

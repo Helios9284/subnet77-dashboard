@@ -21,6 +21,7 @@ interface USDValue {
   token0Value?: number | string;
   token1Value?: number | string;
   totalValue?: number | string;
+  token1Price?: number | string;
 }
 
 interface Position {
@@ -34,6 +35,7 @@ interface Position {
   token1Amount?: number | string;
   liquidity?: number | string;
   usdValue?: USDValue;
+  
 }
 
 interface PoolInfo {
@@ -75,8 +77,6 @@ export default function Page() {
         // Update state with fetched data
         setPoolInfo(result.positions);
         setAddressesWithPositions(addressesWithPositions);
-
-        console.log(addressesWithPositions)
         
         // Auto-select first address if available
         if (addressesWithPositions.length > 0 && !selectedAddress) {
@@ -117,9 +117,8 @@ export default function Page() {
       const positions = poolInfo[walletAddress];
       
       if (positions && positions.length > 0) {
-        console.log(positions)
         setSelectedPosition(positions);
-        console.log("my pool positions:::", selectedPosition)
+        console.log(positions)
       } else {
         setError('No positions found for this wallet address');
         setSelectedPosition(null);
@@ -137,7 +136,7 @@ export default function Page() {
     return num.toFixed(decimals);
   };
 
-  const formatCurrency = (value: string | number) => {
+  const formatCurrency = (value: string | number,) => {
     const num = typeof value === 'string' ? parseFloat(value) : value;
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -147,29 +146,14 @@ export default function Page() {
     }).format(num);
   };
 
-  // const generateTickData = (position: Position) => {
-  //   if (!position.tickLower?.tickIdx || !position.tickUpper?.tickIdx || !position.pool?.tick) {
-  //     return [];
-  //   }
-
-  //   const tickLower = Number(position.tickLower.tickIdx);
-  //   const tickUpper = Number(position.tickUpper.tickIdx);
-  //   const currentTick = Number(position.pool.tick);
-    
-  //   const range = tickUpper - tickLower;
-  //   const step = Math.max(1, Math.floor(range / 20));
-    
-  //   const data = [];
-  //   for (let i = tickLower - range * 0.2; i <= tickUpper + range * 0.2; i += step) {
-  //     data.push({
-  //       tick: i,
-  //       inRange: i >= tickLower && i <= tickUpper ? 100 : 0,
-  //       liquidity: i >= tickLower && i <= tickUpper ? 80 : 0
-  //     });
-  //   }
-    
-  //   return data;
-  // };
+  const formatETHCurrency = (value: string | number, value1: string | number) => {
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    const num1 = typeof value1 === 'string' ? parseFloat(value1) : value1;
+    console.log(num, num1)
+    const result = num/num1;
+    console.log(num, num1, result)
+    return result.toFixed(3);
+  };
   
   const generateTickData = (position: Position) => {
     if (!position.tickLower?.tickIdx || !position.tickUpper?.tickIdx || !position.pool?.tick) {
@@ -187,11 +171,13 @@ export default function Page() {
     
     // Add 20% padding on both sides
     const padding = range * 0.2;
-    const chartStart = minTick - padding;
-    const chartEnd = maxTick + padding;
+    // const chartStart = minTick - padding;
+    // const chartEnd = maxTick + padding;
+    const chartStart = minTick;
+    const chartEnd = maxTick;
     
     // Use smaller step size for better resolution
-    const step = Math.max(1, Math.floor((chartEnd - chartStart) / 50));
+    const step = Math.max(1, Math.floor((chartEnd - chartStart) / 1000));
     
     const data = [];
     
@@ -329,7 +315,7 @@ export default function Page() {
               <div className="space-y-2">
                 <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Position Value</h3>
                 <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(position.usdValue?.totalValue || '0')}
+                  {formatCurrency(position.usdValue?.totalValue || '0')}/{formatETHCurrency(position.usdValue?.totalValue || '0', position.usdValue?.token1Price || '0')}ETH
                 </p>
               </div>
             </div>
@@ -357,24 +343,21 @@ export default function Page() {
                     ]}
                   />
                   
-                  {/* Current tick line */}
                   <ReferenceLine 
                     x={Number(position.pool?.tick)} 
                     stroke="red" 
                     strokeWidth={2}
                     strokeDasharray="5 5"
-                    label={{ value: "Current Tick", position: "top" }}
+                    label={{ value: "Current Tick", }}
                   />
                   
-                  {/* Lower bound */}
                   <ReferenceLine 
                     x={Number(position.tickLower?.tickIdx)} 
                     stroke="green" 
                     strokeWidth={2}
-                    label={{ value: "Lower", position: "left" }}
+                    label={{ value: "", position: "left" }}
                   />
                   
-                  {/* Upper bound */}
                   <ReferenceLine 
                     x={Number(position.tickUpper?.tickIdx)} 
                     stroke="green" 

@@ -189,7 +189,7 @@ export default function Page() {
     const chartEnd = maxTick;
     
     // Use smaller step size for better resolution
-    const step = Math.max(1, Math.floor((chartEnd - chartStart) / 1000));
+    const step = Math.max(1, Math.floor((chartEnd - chartStart) / 10000));
     
     const data = [];
     
@@ -353,6 +353,11 @@ export default function Page() {
                       name === 'liquidity' ? `${value}%` : value,
                       name === 'liquidity' ? 'Liquidity' : name
                     ]}
+                    labelStyle={{ 
+                      color: '#3B82F6',     
+                      fontWeight: 'bold',
+                      fontSize: '16px'
+                  }}
                   />
                   
                   <ReferenceLine 
@@ -384,6 +389,7 @@ export default function Page() {
                     strokeWidth={3}
                     dot={false}
                   />
+                  
                 </LineChart>
               </ResponsiveContainer>
             </div>

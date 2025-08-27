@@ -43,6 +43,7 @@ export default function PoolWeightChart() {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const result = await response.json();
+                console.log(result)
                 
                 // Mock delay
                 await new Promise(resolve => setTimeout(resolve, 1000));

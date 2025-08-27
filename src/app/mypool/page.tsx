@@ -327,7 +327,7 @@ export default function Page() {
               <div className="space-y-2">
                 <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Position Value</h3>
                 <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(position.usdValue?.totalValue || '0')}/{formatETHCurrency(position.usdValue?.totalValue || '0', position.usdValue?.token1Price || '0')}ETH
+                  {formatCurrency(position.usdValue?.totalValue || '0')}/{formatETHCurrency(position.usdValue?.totalValue || '0', position.usdValue?.token1Price || '0')}{position.token1?.symbol}
                 </p>
               </div>
             </div>

@@ -50,6 +50,7 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<string>('');
   const [addressesWithPositions, setAddressesWithPositions] = useState<string[]>([]);
+  const [showStatus, setShowStatus] = useState(false);
 
   useEffect(() => {
     let isCancelled = false;
@@ -254,10 +255,27 @@ export default function Page() {
 
       {selectedPosition?.map((position, index) =>(
         <div key={index} className="space-y-6 ">
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900">
+                  {position.token0?.symbol} / {position.token1?.symbol} Position
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Total Value: {formatCurrency(position.usdValue?.totalValue || '0')}
+                </p>
+              </div>
+              <button 
+                className="text-gray-100 cursor-pointer bg-blue-500 px-3 py-1 rounded hover:bg-blue-300" 
+                onClick={() => setShowStatus(!showStatus)}
+              >
+                {showStatus ? 'Hide' : 'More'}
+              </button>
+            </div>
+          </div>
           {/* Position Details Card */}
-          <div className="bg-gray-50 rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Position Details</h2>
-            
+          <div className="bg-gray-50 rounded-lg p-6" style={{ display: showStatus ? 'block' : 'none' }}>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Position Details</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* Token Pair */}
               <div className="space-y-2">

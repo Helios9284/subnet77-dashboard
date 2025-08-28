@@ -22,6 +22,7 @@ interface USDValue {
   token1Value?: number | string;
   totalValue?: number | string;
   token1Price?: number | string;
+  token0Price?: number | string;
 }
 
 interface Position {
@@ -56,67 +57,62 @@ export default function Page() {
   const [highRangePercent, setHighRangePercent] = useState<number>(90);
 
   useEffect(() => {
-    let isCancelled = false;
+  let isCancelled = false;
 
-    async function fetchData() {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const response = await fetch('/api/position');
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const result = await response.json();
-
-        if (isCancelled) return;
-
-        const addressesWithPositions = Object.keys(result.positions || {})
-          .filter(address => result.positions[address] && result.positions[address].length > 0);
-
-        setPoolInfo(result.positions);
-        setAddressesWithPositions(addressesWithPositions);
-        
-        if (addressesWithPositions.length > 0 && !selectedAddress) {
-          setSelectedAddress(addressesWithPositions[0]);
-        }
-
-        const positions = poolInfo[walletAddress];
+  async function fetchData() {
+    try {
+      setLoading(true);
+      setError(null);
       
-        if (positions && positions.length > 0) {
-          setSelectedPosition(positions);
-          console.log(positions)
-        } else {
-          setError('No positions found for this wallet address');
-          setSelectedPosition(null);
-        }
+      const response = await fetch('/api/position');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      if (isCancelled) return;
 
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-      } catch (error) {
-        console.error('Error fetching pool info:', error);
-        if (!isCancelled) {
-          if (typeof error === 'object' && error !== null && 'message' in error) {
-            setError((error as { message?: string }).message || 'Failed to fetch pool information');
-          } else {
-            setError('Failed to fetch pool information');
-          }
-        }
-      } finally {
-        if (!isCancelled) {
-          setLoading(false);
+      // ✅ SOLUTION: Use fresh data directly, not stale state
+      const freshPositions = result.positions;
+      const addressesWithPositions = Object.keys(freshPositions || {})
+        .filter(address => freshPositions[address] && freshPositions[address].length > 0);
+
+      // Work with fresh data
+      const positions = freshPositions[walletAddress];
+      
+      if (positions && positions.length > 0) {
+        setSelectedPosition(positions);
+      } else {
+        setError('No positions found for this wallet address');
+        setSelectedPosition(null);
+      }
+
+      // Update states after processing
+      setPoolInfo(freshPositions);
+      setAddressesWithPositions(addressesWithPositions);
+      
+      if (addressesWithPositions.length > 0 && !selectedAddress) {
+        setSelectedAddress(addressesWithPositions[0]);
+      }
+      
+    } catch (error) {
+      if (!isCancelled) {
+        if (typeof error === 'object' && error !== null && 'message' in error) {
+          setError((error as { message?: string }).message || 'Failed to fetch pool information');
+        } else {
+          setError('Failed to fetch pool information');
         }
       }
+    } finally {
+      if (!isCancelled) {
+        setLoading(false);
+      }
     }
+  }
 
-    fetchData();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
+  fetchData();
+  return () => { isCancelled = true; };
+}, []);
 
   const handleWalletSubmit = async () => {
     if (!walletAddress.trim()) return;
@@ -163,9 +159,9 @@ export default function Page() {
     const { lowThreshold, highThreshold } = calculateRangeThresholds(position);
     
     // Check if current tick is very close to thresholds (within 50 ticks tolerance)
-    const tolerance = 50;
-    const isNearLowThreshold = Math.abs(currentTick - lowThreshold) <= tolerance;
-    const isNearHighThreshold = Math.abs(currentTick - highThreshold) <= tolerance;
+    const tolerance = 0;
+    const isNearLowThreshold = (currentTick - lowThreshold) <= tolerance;
+    const isNearHighThreshold = (currentTick - highThreshold) >= tolerance;
     
     return {
       isDangerous: isNearLowThreshold || isNearHighThreshold,
@@ -374,7 +370,7 @@ export default function Page() {
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Token Pair</h3>
                   <p className="text-lg text-gray-500 font-semibold">
-                    {position.token0?.symbol} / {position.token1?.symbol}
+                    {position.token0?.symbol}({position.usdValue?.token0Price}) / {position.token1?.symbol}({position.usdValue?.token1Price})
                   </p>
                   <p className="text-sm text-gray-600">Fee: {Number(position.pool?.feeTier) / 10000}%</p>
                 </div>
@@ -390,7 +386,7 @@ export default function Page() {
                 </div>
 
                 {/* Prices */}
-                <div className="space-y-2">
+                {/* <div className="space-y-2">
                   <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Token Prices</h3>
                   <div className="space-y-1">
                     <p className="text-sm text-gray-500">
@@ -402,7 +398,7 @@ export default function Page() {
                       {formatNumber(position.pool?.token1Price || '0', 8)} {position.token0?.symbol}
                     </p>
                   </div>
-                </div>
+                </div> */}
 
                 {/* Position Amounts */}
                 <div className="space-y-2">

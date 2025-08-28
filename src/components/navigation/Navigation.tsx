@@ -9,7 +9,7 @@ export const Navigation = () => {
 
   return (
     <>
-    <nav className="  z-0 h-[50px] mt-17 p-4 bg-gray-800 text-white text-start fixed top-0 left-0 w-full lg:flex flex-col justify-self-start">
+    <nav className=" lg:hidden z-0 h-[50px] mt-17 p-4 bg-gray-800 text-white text-start fixed top-0 left-0 w-full flex-col justify-self-start">
       <ul className="flex justify-center space-x-2  px-4">
         <div className="flex space-x-2 items-center">
           <div className="text-blue-400"><FaHome size="1.3em" /></div>

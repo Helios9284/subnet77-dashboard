@@ -12,11 +12,15 @@ export const Total =()=> {
 
   useEffect(() => {
     let isCancelled = false;
-
+    let delayId: ReturnType<typeof setTimeout> | null = null;
     async function fetchData() {
       try {
-        setLoading(true);
+        // setLoading(true);
         setError(null);
+
+        await new Promise<void>((resolve) => {
+          delayId = setTimeout(resolve, 5000);
+        });
         
         const response = await fetch('/api/position');
         
@@ -56,6 +60,7 @@ export const Total =()=> {
         }
       } finally {
         if (!isCancelled) {
+          if (delayId) clearTimeout(delayId);
           setLoading(false);
         }
       }
@@ -67,7 +72,7 @@ export const Total =()=> {
     return () => {
       isCancelled = true;
     };
-  }, []); // Empty dependency array - fetch once on mount
+  }, [addressesWithPositions]); // Empty dependency array - fetch once on mount
 
   interface Token {
     symbol?: string;

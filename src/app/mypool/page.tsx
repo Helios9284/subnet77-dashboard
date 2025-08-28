@@ -65,12 +65,16 @@ export default function Page() {
 
   useEffect(() => {
   let isCancelled = false;
-
+  let delayId: ReturnType<typeof setTimeout> | null = null;
   async function fetchData() {
     try {
-      setLoading(true);
+      // setLoading(true);
       setError(null);
-      
+
+      await new Promise<void>((resolve) => {
+        delayId = setTimeout(resolve, 30000);
+      });
+
       const response = await fetch('/api/position');
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -113,13 +117,14 @@ export default function Page() {
     } finally {
       if (!isCancelled) {
         setLoading(false);
+        if (delayId) clearTimeout(delayId);
       }
     }
   }
 
   fetchData();
   return () => { isCancelled = true; };
-}, []);
+}, [poolInfo]);
 
   const handleWalletSubmit = async () => {
     if (!walletAddress.trim()) return;

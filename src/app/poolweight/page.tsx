@@ -31,11 +31,15 @@ export default function PoolWeightChart() {
 
     useEffect(() => {
         let isCancelled = false;
+        let delayId: ReturnType<typeof setTimeout> | null = null;
         
         async function fetchData() {
             try {
-                setLoading(true);
+                // setLoading(true);
                 setError(null);
+                await new Promise<void>((resolve) => {
+                    delayId = setTimeout(resolve, 60000);
+                  });
 
                 // Simulate API call - replace with your actual endpoint
                 const response = await fetch('/api/poolinfo');
@@ -63,6 +67,7 @@ export default function PoolWeightChart() {
             } finally {
                 if (!isCancelled) {
                     setLoading(false);
+                    if (delayId) clearTimeout(delayId);
                 }
             }
         }
@@ -72,7 +77,7 @@ export default function PoolWeightChart() {
         return () => {
             isCancelled = true;
         };
-    }, []); // Fixed: Added dependency array
+    }, [poolData]); // Fixed: Added dependency array
 
     // Prepare data for charts
     const chartData = poolData?.pools.map((pool, index) => ({

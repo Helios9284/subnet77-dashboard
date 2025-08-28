@@ -19,7 +19,7 @@ export const Total =()=> {
         setError(null);
 
         await new Promise<void>((resolve) => {
-          delayId = setTimeout(resolve, 5000);
+          delayId = setTimeout(resolve, 30000);
         });
         
         const response = await fetch('/api/position');

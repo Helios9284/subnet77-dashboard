@@ -546,16 +546,16 @@ if (error) {
                     {/* Alert Threshold Lines */}
                     <ReferenceLine 
                       x={lowThreshold} 
-                      stroke="red" 
+                      stroke="orange" 
                       strokeWidth={1}
-                      label={{ value: "Low Level", position: "right" }}
+                      label={{ value: "Risk Line1", position: "right" }}
                     />
                     
                     <ReferenceLine 
                       x={highThreshold} 
-                      stroke="red" 
+                      stroke="orange" 
                       strokeWidth={1}
-                      label={{ value: "High Level", position: "right" }}
+                      label={{ value: "Risk Line2", position: "right" }}
                     />
                     
                     <Line 
@@ -570,10 +570,12 @@ if (error) {
                 </ResponsiveContainer>
               </div>
               
-              <div className="mt-4 text-sm text-gray-600">
-                <div className="flex flex-wrap gap-6">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-0.5 bg-red-500"></div>
+              <div className="mt-4 text-sm text-gray-600 justify-center">
+                <div className="flex  gap-6 justify-center">
+                  <div className="flex items-center gap-1">
+                    <div className="w-1 h-0.5 bg-red-500"></div>
+                    <div className="w-1 h-0.5 bg-red-500"></div>
+                    <div className="w-1 h-0.5 bg-red-500"></div>
                     <span>Current Tick ({position.pool?.tick})</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -586,7 +588,7 @@ if (error) {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-0.5 bg-orange-500" style={{ borderStyle: 'dashed' }}></div>
-                    <span>Alert Thresholds ({lowThreshold} - {highThreshold})</span>
+                    <span>Danger Range ({lowThreshold} - {highThreshold})</span>
                   </div>
                 </div>
               </div>

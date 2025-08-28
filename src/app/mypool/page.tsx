@@ -56,6 +56,13 @@ export default function Page() {
   const [lowRangePercent, setLowRangePercent] = useState<number>(10);
   const [highRangePercent, setHighRangePercent] = useState<number>(90);
 
+  const walletOptions = [
+    { label: 'Select a wallet address', value: '' },
+    { label: '5E7iA62LLossCJWqGwVyPkrCsSMcWh6jQ9eFAuZfXm3qaXyt', value: '5E7iA62LLossCJWqGwVyPkrCsSMcWh6jQ9eFAuZfXm3qaXyt' },
+    { label: '5EEwjeCMWdp9aEozDNdEGAvwqT1yBXCAFMX6QvwEqSAP4rgR', value: '5EEwjeCMWdp9aEozDNdEGAvwqT1yBXCAFMX6QvwEqSAP4rgR' },
+    { label: '5DemtiyxV7jaJsLSb3Zjs2ZU9KgLshow5ZVHFFEovbRke3pb', value: '5DemtiyxV7jaJsLSb3Zjs2ZU9KgLshow5ZVHFFEovbRke3pb' },
+  ];
+
   useEffect(() => {
   let isCancelled = false;
 
@@ -287,14 +294,27 @@ export default function Page() {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Wallet Address
             </label>
-            <input
+            {/* <input
               type="text"
               value={walletAddress}
               onChange={(e) => setWalletAddress(e.target.value)}
               placeholder="Enter your wallet address..."
               className="w-full text-gray-500 px-3 py-2 border bg-gray-100 border-gray-400 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={loading}
-            />
+            /> */}
+            <select
+              id="wallet-select"
+              value={walletAddress}
+              onChange={(e) => setWalletAddress(e.target.value)}
+              disabled={loading}
+              className="w-full text-gray-500 px-3 py-2 border bg-gray-100 border-gray-400 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              {walletOptions.map((option) => (
+                <option key={option.value} value={option.value} disabled={option.value === ''}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
           <button
             onClick={handleWalletSubmit}

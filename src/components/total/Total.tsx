@@ -17,10 +17,10 @@ export const Total =()=> {
       try {
         // setLoading(true);
         setError(null);
-
-        await new Promise<void>((resolve) => {
-          delayId = setTimeout(resolve, 30000);
-        });
+          await new Promise<void>((resolve) => {
+            delayId = setTimeout(resolve, 5000);
+          });
+        
         
         const response = await fetch('/api/position');
         

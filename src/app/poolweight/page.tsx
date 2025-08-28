@@ -26,7 +26,7 @@ const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'
 
 export default function PoolWeightChart() {
     const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [poolData, setPoolData] = useState<PoolData | null>(null);
 
     useEffect(() => {
@@ -38,7 +38,7 @@ export default function PoolWeightChart() {
                 // setLoading(true);
                 setError(null);
                 await new Promise<void>((resolve) => {
-                    delayId = setTimeout(resolve, 60000);
+                    delayId = setTimeout(resolve, 10000);
                   });
 
                 // Simulate API call - replace with your actual endpoint
@@ -48,9 +48,6 @@ export default function PoolWeightChart() {
                 }
                 const result = await response.json();
                 console.log(result)
-                
-                // Mock delay
-                await new Promise(resolve => setTimeout(resolve, 1000));
 
                 if (!isCancelled) {
                     setPoolData(result);

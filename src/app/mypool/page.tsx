@@ -44,9 +44,9 @@ interface PoolInfo {
 
 export default function Page() {
   const [poolInfo, setPoolInfo] = useState<PoolInfo>({});
-  const [walletAddress, setWalletAddress] = useState<string>('5EEwjeCMWdp9aEozDNdEGAvwqT1yBXCAFMX6QvwEqSAP4rgR');
+  const [walletAddress, setWalletAddress] = useState<string>('');
   const [selectedPosition, setSelectedPosition] = useState<Position[] | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<string>('');
   const [addressesWithPositions, setAddressesWithPositions] = useState<string[]>([]);
@@ -72,7 +72,7 @@ export default function Page() {
       setError(null);
 
       await new Promise<void>((resolve) => {
-        delayId = setTimeout(resolve, 30000);
+        delayId = setTimeout(resolve, 10000);
       });
 
       const response = await fetch('/api/position');
@@ -130,7 +130,7 @@ export default function Page() {
     if (!walletAddress.trim()) return;
 
     try {
-      setLoading(true);
+      // setLoading(true);
       setError(null);
       const positions = poolInfo[walletAddress];
       
@@ -248,6 +248,33 @@ export default function Page() {
     
     return data.sort((a, b) => a.tick - b.tick);
   };
+
+
+  if (loading) {
+    return (
+        <div className="p-6 max-w-6xl mx-auto py-30">
+            <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <span className="ml-4 text-gray-600">Loading pool data...</span>
+            </div>
+        </div>
+    );
+}
+
+if (error) {
+    return (
+        <div className="p-6 max-w-6xl mx-auto py-30">
+            <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                <div className="flex">
+                    <div className="text-red-600">
+                        <h3 className="text-sm font-medium">Error loading pool data</h3>
+                        <p className="mt-1 text-sm">{error}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
   return(
     <div className="p-6 max-w-6xl mx-auto py-30">

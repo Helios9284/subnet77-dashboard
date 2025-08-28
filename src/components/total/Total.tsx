@@ -240,7 +240,7 @@ export const Total =()=> {
   // Loading state
   if (loading) {
     return (
-      <div className="font-sans min-h-screen bg-gray-50 p-8">
+      <div className="font-sans min-h-screen p-8">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center min-h-96">
             <div className="text-center">
@@ -257,7 +257,7 @@ export const Total =()=> {
   // Error state
   if (error) {
     return (
-      <div className="font-sans min-h-screen bg-gray-50 p-8">
+      <div className="font-sans min-h-screen  p-8">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center min-h-96">
             <div className="text-center">

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 export const Total =()=> {
   const [poolInfo, setPoolInfo] = useState<PoolInfo>({});
@@ -7,6 +7,8 @@ export const Total =()=> {
   const [addressesWithPositions, setAddressesWithPositions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showMinersModal, setShowMinersModal] = useState(false);
+  const [selectedPoolForMiners, setSelectedPoolForMiners] = useState<PoolStats | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
@@ -109,6 +111,83 @@ export const Total =()=> {
     [key: string]: any;
   }
 
+  // New interface for pool statistics
+  interface PoolStats {
+    poolKey: string;
+    token0Symbol: string;
+    token1Symbol: string;
+    feeTier: string;
+    minerCount: number;
+    totalPositions: number;
+    miners: string[];
+    totalLiquidity: number;
+    totalUSDValue: number;
+  }
+
+  // Calculate pool statistics with miner counts
+  const poolStats = useMemo(() => {
+    if (!poolInfo || !poolInfo.positions) return [];
+
+    const poolMap = new Map<string, {
+      miners: Set<string>;
+      positions: Position[];
+      token0Symbol: string;
+      token1Symbol: string;
+      feeTier: string;
+    }>();
+
+    // Group positions by pool
+    Object.entries(poolInfo.positions).forEach(([address, positions]) => {
+      positions.forEach(position => {
+        const poolKey = `${position.token0?.symbol || 'Token0'}-${position.token1?.symbol || 'Token1'}-${position.pool?.feeTier || '0'}`;
+        
+        if (!poolMap.has(poolKey)) {
+          poolMap.set(poolKey, {
+            miners: new Set<string>(),
+            positions: [],
+            token0Symbol: position.token0?.symbol || 'Token0',
+            token1Symbol: position.token1?.symbol || 'Token1',
+            feeTier: position.pool?.feeTier || '0'
+          });
+        }
+
+        const poolData = poolMap.get(poolKey)!;
+        poolData.miners.add(address);
+        poolData.positions.push(position);
+      });
+    });
+
+    // Convert to array and calculate statistics
+    const stats: PoolStats[] = Array.from(poolMap.entries()).map(([poolKey, data]) => {
+      const totalLiquidity = data.positions.reduce((sum, pos) => {
+        const liquidity = typeof pos.liquidity === 'string' ? parseFloat(pos.liquidity) : pos.liquidity;
+        return sum + (liquidity || 0);
+      }, 0);
+
+      const totalUSDValue = data.positions.reduce((sum, pos) => {
+        const usdValue = typeof pos.usdValue?.totalValue === 'string' 
+          ? parseFloat(pos.usdValue.totalValue) 
+          : pos.usdValue?.totalValue;
+        return sum + (usdValue || 0);
+      }, 0);
+
+      return {
+        poolKey,
+        token0Symbol: data.token0Symbol,
+        token1Symbol: data.token1Symbol,
+        feeTier: data.feeTier,
+        minerCount: data.miners.size,
+        totalPositions: data.positions.length,
+        miners: Array.from(data.miners),
+        totalLiquidity,
+        totalUSDValue
+      };
+    });
+
+    // Sort by miner count (descending)
+    return stats.sort((a, b) => b.minerCount - a.minerCount);
+  }, [poolInfo]);
+
   const formatNumber = (num: number | string | undefined, decimals: number = 4): string => {
     if (!num) return '0';
     const number = typeof num === 'string' ? parseFloat(num) : num;
@@ -118,10 +197,6 @@ export const Total =()=> {
       maximumFractionDigits: decimals 
     });
   };
-
-  interface FormatAddressProps {
-    address: string;
-  }
 
   const formatAddress = (address: string): string => {
     if (!address || typeof address !== 'string') return '';
@@ -133,18 +208,28 @@ export const Total =()=> {
     return poolInfo.positions[selectedAddress] || [];
   };
 
-  interface HandleAddressSelectProps {
-    address: string;
-  }
-
   const handleAddressSelect = (address: string): void => {
     setSelectedAddress(address);
   };
 
   const handleRetry = () => {
     setError(null);
-    // Trigger re-fetch by updating a dependency (could use a refresh state)
     window.location.reload();
+  };
+
+  const handleShowAllMiners = (pool: PoolStats) => {
+    setSelectedPoolForMiners(pool);
+    setShowMinersModal(true);
+  };
+
+  const handleCloseMinersModal = () => {
+    setShowMinersModal(false);
+    setSelectedPoolForMiners(null);
+  };
+
+  const handleMinerClick = (minerAddress: string) => {
+    setSelectedAddress(minerAddress);
+    handleCloseMinersModal();
   };
 
   // Loading state
@@ -218,6 +303,78 @@ export const Total =()=> {
       <div className="max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">Pool Positions Dashboard</h1>
         
+        {/* Pool Statistics Section */}
+        <div className="mb-8">
+          <h2 className="text-2xl font-semibold text-gray-800 mb-6">Pool Statistics</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {poolStats.map((pool, index) => (
+              <div key={pool.poolKey} className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
+                <div className="flex justify-between items-start mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {pool.token0Symbol}/{pool.token1Symbol}
+                  </h3>
+                  <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                    {(parseFloat(pool.feeTier) / 10000).toFixed(2)}%
+                  </span>
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm">Miners:</span>
+                    <div className="flex items-center">
+                      <span className="bg-green-100 text-green-800 text-sm font-medium px-2.5 py-0.5 rounded-full">
+                        {pool.minerCount}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 text-sm">Total Positions:</span>
+                    <span className="text-gray-900 font-medium">{pool.totalPositions}</span>
+                  </div>
+                  
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 text-sm">Total Liquidity:</span>
+                    <span className="text-gray-900 font-medium">{formatNumber(pool.totalLiquidity, 0)}</span>
+                  </div>
+                  
+                  {pool.totalUSDValue > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 text-sm">Total USD Value:</span>
+                      <span className="text-green-600 font-medium">${formatNumber(pool.totalUSDValue, 2)}</span>
+                    </div>
+                  )}
+                  
+                  {/* Miner addresses preview with interactive buttons */}
+                  <div className="pt-2 border-t">
+                    <span className="text-gray-600 text-xs">Miners:</span>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {pool.miners.slice(0, 3).map(minerAddress => (
+                        <button
+                          key={minerAddress}
+                          onClick={() => handleMinerClick(minerAddress)}
+                          className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded font-mono transition-colors cursor-pointer"
+                          title={`Click to view positions for ${minerAddress}`}
+                        >
+                          {formatAddress(minerAddress)}
+                        </button>
+                      ))}
+                      {pool.miners.length > 3 && (
+                        <button 
+                          onClick={() => handleShowAllMiners(pool)}
+                          className="bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs px-2 py-1 rounded transition-colors cursor-pointer"
+                        >
+                          +{pool.miners.length - 3} more
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Wallet Addresses List */}
           <div className="lg:col-span-1">
@@ -274,91 +431,104 @@ export const Total =()=> {
                   </div>
                   
                   <div className="space-y-6">
-                    {getSelectedPositions().map((position, index) => (
-                      <div key={position.id || index} className="border rounded-lg p-6 bg-gray-50">
-                        <div className="flex justify-between items-start mb-4">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {position.token0?.symbol || 'Token0'}/{position.token1?.symbol || 'Token1'} Pool
-                          </h3>
-                          <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">
-                            Fee: {position.pool?.feeTier ? (parseFloat(position.pool.feeTier) / 10000).toFixed(2) : '0.00'}%
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {/* Pool Information */}
-                          <div className="space-y-4">
-                            <h4 className="font-medium text-gray-700 border-b pb-2">Pool Information</h4>
-                            
-                            <div className="space-y-2 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Current Tick:</span>
-                                <span className="font-mono text-gray-600">{position.pool?.tick || 'N/A'}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Tick Lower:</span>
-                                <span className="font-mono text-gray-600">{position.tickLower?.tickIdx || 'N/A'}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Tick Upper:</span>
-                                <span className="font-mono text-gray-600">{position.tickUpper?.tickIdx || 'N/A'}</span>
-                              </div>
+                    {getSelectedPositions().map((position, index) => {
+                      // Find the pool stats for this position
+                      const currentPoolKey = `${position.token0?.symbol || 'Token0'}-${position.token1?.symbol || 'Token1'}-${position.pool?.feeTier || '0'}`;
+                      const currentPoolStats = poolStats.find(pool => pool.poolKey === currentPoolKey);
+                      
+                      return (
+                        <div key={position.id || index} className="border rounded-lg p-6 bg-gray-50">
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                {position.token0?.symbol || 'Token0'}/{position.token1?.symbol || 'Token1'} Pool
+                              </h3>
+                              {currentPoolStats && (
+                                <p className="text-sm text-gray-600 mt-1">
+                                  {currentPoolStats.minerCount} miners in this pool
+                                </p>
+                              )}
                             </div>
-
-                            <div className="space-y-2 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Token0 Price:</span>
-                                <span className="font-mono text-gray-600">{formatNumber(position.pool?.token0Price, 6)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Token1 Price:</span>
-                                <span className="font-mono text-gray-600">{formatNumber(position.pool?.token1Price, 6)}</span>
-                              </div>
-                            </div>
+                            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                              Fee: {position.pool?.feeTier ? (parseFloat(position.pool.feeTier) / 10000).toFixed(2) : '0.00'}%
+                            </span>
                           </div>
 
-                          {/* Position Details */}
-                          <div className="space-y-4">
-                            <h4 className="font-medium text-gray-700 border-b pb-2">Position Details</h4>
-                            
-                            <div className="space-y-2 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">{position.token0?.symbol || 'Token0'} Amount:</span>
-                                <span className="font-mono text-gray-600">{formatNumber(position.token0Amount)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">{position.token1?.symbol || 'Token1'} Amount:</span>
-                                <span className="font-mono text-gray-600">{formatNumber(position.token1Amount)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">Liquidity:</span>
-                                <span className="font-mono text-gray-600">{formatNumber(position.liquidity, 0)}</span>
-                              </div>
-                            </div>
-
-                            {position.usdValue && (
-                              <div className="bg-green-50 p-3 rounded">
-                                <h5 className="font-medium text-green-800 mb-2">USD Values</h5>
-                                <div className="space-y-1 text-sm text-green-700">
-                                  <div className="flex justify-between">
-                                    <span>{position.token0?.symbol || 'Token0'} Value:</span>
-                                    <span>${formatNumber(position.usdValue.token0Value, 2)}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span>{position.token1?.symbol || 'Token1'} Value:</span>
-                                    <span>${formatNumber(position.usdValue.token1Value, 2)}</span>
-                                  </div>
-                                  <div className="flex justify-between font-semibold border-t pt-1 border-green-200">
-                                    <span>Total Value:</span>
-                                    <span>${formatNumber(position.usdValue.totalValue, 2)}</span>
-                                  </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Pool Information */}
+                            <div className="space-y-4">
+                              <h4 className="font-medium text-gray-700 border-b pb-2">Pool Information</h4>
+                              
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Current Tick:</span>
+                                  <span className="font-mono text-gray-600">{position.pool?.tick || 'N/A'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Tick Lower:</span>
+                                  <span className="font-mono text-gray-600">{position.tickLower?.tickIdx || 'N/A'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Tick Upper:</span>
+                                  <span className="font-mono text-gray-600">{position.tickUpper?.tickIdx || 'N/A'}</span>
                                 </div>
                               </div>
-                            )}
+
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Token0 Price:</span>
+                                  <span className="font-mono text-gray-600">{formatNumber(position.pool?.token0Price, 6)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Token1 Price:</span>
+                                  <span className="font-mono text-gray-600">{formatNumber(position.pool?.token1Price, 6)}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Position Details */}
+                            <div className="space-y-4">
+                              <h4 className="font-medium text-gray-700 border-b pb-2">Position Details</h4>
+                              
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">{position.token0?.symbol || 'Token0'} Amount:</span>
+                                  <span className="font-mono text-gray-600">{formatNumber(position.token0Amount)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">{position.token1?.symbol || 'Token1'} Amount:</span>
+                                  <span className="font-mono text-gray-600">{formatNumber(position.token1Amount)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Liquidity:</span>
+                                  <span className="font-mono text-gray-600">{formatNumber(position.liquidity, 0)}</span>
+                                </div>
+                              </div>
+
+                              {position.usdValue && (
+                                <div className="bg-green-50 p-3 rounded">
+                                  <h5 className="font-medium text-green-800 mb-2">USD Values</h5>
+                                  <div className="space-y-1 text-sm text-green-700">
+                                    <div className="flex justify-between">
+                                      <span>{position.token0?.symbol || 'Token0'} Value:</span>
+                                      <span>${formatNumber(position.usdValue.token0Value, 2)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span>{position.token1?.symbol || 'Token1'} Value:</span>
+                                      <span>${formatNumber(position.usdValue.token1Value, 2)}</span>
+                                    </div>
+                                    <div className="flex justify-between font-semibold border-t pt-1 border-green-200">
+                                      <span>Total Value:</span>
+                                      <span>${formatNumber(position.usdValue.totalValue, 2)}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -376,6 +546,76 @@ export const Total =()=> {
           </div>
         </div>
       </div>
+
+      {/* Miners Modal */}
+      {showMinersModal && selectedPoolForMiners && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div className="flex justify-between items-center p-6 border-b">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">
+                  All Miners in {selectedPoolForMiners.token0Symbol}/{selectedPoolForMiners.token1Symbol} Pool
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Fee Tier: {(parseFloat(selectedPoolForMiners.feeTier) / 10000).toFixed(2)}% • 
+                  Total: {selectedPoolForMiners.minerCount} miners
+                </p>
+              </div>
+              <button
+                onClick={handleCloseMinersModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="Close modal"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {selectedPoolForMiners.miners.map((minerAddress, index) => {
+                  const positionCount = poolInfo?.positions?.[minerAddress]?.filter(pos => 
+                    `${pos.token0?.symbol || 'Token0'}-${pos.token1?.symbol || 'Token1'}-${pos.pool?.feeTier || '0'}` === selectedPoolForMiners.poolKey
+                  ).length || 0;
+                  
+                  return (
+                    <button
+                      key={minerAddress}
+                      onClick={() => handleMinerClick(minerAddress)}
+                      className={`p-4 border rounded-lg text-left transition-colors hover:bg-gray-50 ${
+                        selectedAddress === minerAddress 
+                          ? 'border-blue-300 bg-blue-50' 
+                          : 'border-gray-200'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="font-mono text-sm text-gray-900 mb-1">
+                            {formatAddress(minerAddress)}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {positionCount} position{positionCount !== 1 ? 's' : ''} in this pool
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          #{index + 1}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            
+            <div className="p-4 border-t bg-gray-50 text-center">
+              <p className="text-sm text-gray-600">
+                Click on any miner address to view their positions
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

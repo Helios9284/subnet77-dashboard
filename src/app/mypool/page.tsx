@@ -1,6 +1,7 @@
 'use client'
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { AlertTriangle, Volume2, VolumeX, Bell, BellOff } from 'lucide-react';
 
 interface Token {
   symbol?: string;
@@ -42,6 +43,14 @@ interface PoolInfo {
   [address: string]: Position[];
 }
 
+interface AlarmState {
+  isActive: boolean;
+  acknowledgedAlarms: Set<string>;
+  soundEnabled: boolean;
+  notificationsEnabled: boolean;
+  alarmVolume: number;
+}
+
 export default function Page() {
   const [poolInfo, setPoolInfo] = useState<PoolInfo>({});
   const [walletAddress, setWalletAddress] = useState<string>('');
@@ -52,9 +61,29 @@ export default function Page() {
   const [addressesWithPositions, setAddressesWithPositions] = useState<string[]>([]);
   const [showStatus, setShowStatus] = useState(false);
   
-  // New state for percentage range inputs
+  // Range configuration
   const [lowRangePercent, setLowRangePercent] = useState<number>(10);
   const [highRangePercent, setHighRangePercent] = useState<number>(90);
+  
+  // Alarm system state
+  const [alarmState, setAlarmState] = useState<AlarmState>({
+    isActive: false,
+    acknowledgedAlarms: new Set(),
+    soundEnabled: true,
+    notificationsEnabled: true,
+    alarmVolume: 0.8
+  });
+  
+  // Audio refs and state
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const alarmIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const oscillatorRef = useRef<OscillatorNode | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  
+  // Check interval for monitoring
+  const monitoringIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [isMonitoring, setIsMonitoring] = useState(false);
+  const [lastAlarmTime, setLastAlarmTime] = useState<Date | null>(null);
 
   const walletOptions = [
     { label: 'Select a wallet address', value: '' },
@@ -63,74 +92,342 @@ export default function Page() {
     { label: '5DemtiyxV7jaJsLSb3Zjs2ZU9KgLshow5ZVHFFEovbRke3pb', value: '5DemtiyxV7jaJsLSb3Zjs2ZU9KgLshow5ZVHFFEovbRke3pb' },
   ];
 
-  useEffect(() => {
-  let isCancelled = false;
-  let delayId: ReturnType<typeof setTimeout> | null = null;
-  async function fetchData() {
+  // Initialize Audio Context
+  const initializeAudio = useCallback(async () => {
     try {
-      // setLoading(true);
-      setError(null);
-
-      await new Promise<void>((resolve) => {
-        delayId = setTimeout(resolve, 10000);
-      });
-
-      const response = await fetch('/api/position');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
       }
-      
-      const result = await response.json();
-      if (isCancelled) return;
+    } catch (error) {
+      console.error('Failed to initialize audio context:', error);
+    }
+  }, []);
 
-      // ✅ SOLUTION: Use fresh data directly, not stale state
-      const freshPositions = result.positions;
-      const addressesWithPositions = Object.keys(freshPositions || {})
-        .filter(address => freshPositions[address] && freshPositions[address].length > 0);
+  // Create alarm sound
+  const createAlarmSound = useCallback(() => {
+    if (!audioContextRef.current || !alarmState.soundEnabled) return;
 
-      // Work with fresh data
-      const positions = freshPositions[walletAddress];
-      
-      if (positions && positions.length > 0) {
-        setSelectedPosition(positions);
-      } else {
-        setError('No positions found for this wallet address');
-        setSelectedPosition(null);
+    try {
+      // Stop existing oscillator
+      if (oscillatorRef.current) {
+        oscillatorRef.current.disconnect();
+        oscillatorRef.current.stop();
       }
 
-      // Update states after processing
-      setPoolInfo(freshPositions);
-      setAddressesWithPositions(addressesWithPositions);
+      const oscillator = audioContextRef.current.createOscillator();
+      const gainNode = audioContextRef.current.createGain();
       
-      if (addressesWithPositions.length > 0 && !selectedAddress) {
-        setSelectedAddress(addressesWithPositions[0]);
-      }
+      oscillator.type = 'square';
+      oscillator.frequency.setValueAtTime(800, audioContextRef.current.currentTime);
+      
+      gainNode.gain.setValueAtTime(0, audioContextRef.current.currentTime);
+      gainNode.gain.linearRampToValueAtTime(alarmState.alarmVolume, audioContextRef.current.currentTime + 0.1);
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContextRef.current.destination);
+      
+      oscillator.start();
+      
+      oscillatorRef.current = oscillator;
+      gainNodeRef.current = gainNode;
+      
+      // Create pulsing alarm pattern
+      let isHigh = true;
+      const pulseInterval = setInterval(() => {
+        if (!oscillatorRef.current) {
+          clearInterval(pulseInterval);
+          return;
+        }
+        
+        const frequency = isHigh ? 800 : 400;
+        oscillator.frequency.setValueAtTime(frequency, audioContextRef.current!.currentTime);
+        isHigh = !isHigh;
+      }, 500);
+      
+      // Store interval reference for cleanup
+      alarmIntervalRef.current = pulseInterval;
       
     } catch (error) {
-      if (!isCancelled) {
-        if (typeof error === 'object' && error !== null && 'message' in error) {
-          setError((error as { message?: string }).message || 'Failed to fetch pool information');
-        } else {
-          setError('Failed to fetch pool information');
+      console.error('Failed to create alarm sound:', error);
+    }
+  }, [alarmState.soundEnabled, alarmState.alarmVolume]);
+
+  // Stop alarm sound
+  const stopAlarmSound = useCallback(() => {
+    if (oscillatorRef.current) {
+      try {
+        if (gainNodeRef.current) {
+          gainNodeRef.current.gain.linearRampToValueAtTime(0, audioContextRef.current!.currentTime + 0.1);
         }
-      }
-    } finally {
-      if (!isCancelled) {
-        setLoading(false);
-        if (delayId) clearTimeout(delayId);
+        
+        setTimeout(() => {
+          if (oscillatorRef.current) {
+            oscillatorRef.current.disconnect();
+            oscillatorRef.current.stop();
+            oscillatorRef.current = null;
+            gainNodeRef.current = null;
+          }
+        }, 100);
+      } catch (error) {
+        console.error('Error stopping alarm:', error);
       }
     }
-  }
+    
+    if (alarmIntervalRef.current) {
+      clearInterval(alarmIntervalRef.current);
+      alarmIntervalRef.current = null;
+    }
+  }, []);
 
-  fetchData();
-  return () => { isCancelled = true; };
-}, [poolInfo]);
+  // Show browser notification
+  const showNotification = useCallback((position: Position, dangerInfo: any) => {
+    if (!alarmState.notificationsEnabled) return;
+
+    const title = `🚨 POSITION ALERT! ${position.token0?.symbol}/${position.token1?.symbol}`;
+    const body = `Current tick (${dangerInfo.currentTick}) is near ${dangerInfo.nearLow ? 'LOW' : 'HIGH'} threshold. Check your position immediately!`;
+    
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') {
+        const notification = new Notification(title, {
+          body,
+          icon: '/favicon.ico',
+          badge: '/favicon.ico',
+          tag: `alarm-${position.id}`,
+          requireInteraction: true,
+          silent: false
+        });
+        
+        notification.onclick = () => {
+          window.focus();
+          notification.close();
+        };
+        
+        // Auto close after 10 seconds if not interacted with
+        setTimeout(() => notification.close(), 10000);
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            showNotification(position, dangerInfo);
+          }
+        });
+      }
+    }
+  }, [alarmState.notificationsEnabled]);
+
+  // Request notification permission
+  const requestNotificationPermission = useCallback(async () => {
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      setAlarmState(prev => ({
+        ...prev,
+        notificationsEnabled: permission === 'granted'
+      }));
+    }
+  }, []);
+
+  // Calculate range thresholds
+  const calculateRangeThresholds = useCallback((position: Position) => {
+    const tickUpper = Number(position.tickUpper?.tickIdx || 0);
+    const tickLower = Number(position.tickLower?.tickIdx || 0);
+    const tickRange = tickUpper - tickLower;
+    
+    const lowThreshold = tickLower + (tickRange * lowRangePercent / 100);
+    const highThreshold = tickLower + (tickRange * highRangePercent / 100);
+    
+    return { 
+      lowThreshold: Math.round(lowThreshold), 
+      highThreshold: Math.round(highThreshold),
+      tickRange 
+    };
+  }, [lowRangePercent, highRangePercent]);
+
+  // Check dangerous position
+  const checkDangerousPosition = useCallback((position: Position) => {
+    const currentTick = Number(position.pool?.tick || 0);
+    const { lowThreshold, highThreshold } = calculateRangeThresholds(position);
+    
+    const tolerance = 0;
+    const isNearLowThreshold = (currentTick - lowThreshold) <= tolerance;
+    const isNearHighThreshold = (currentTick - highThreshold) >= tolerance;
+    
+    return {
+      isDangerous: isNearLowThreshold || isNearHighThreshold,
+      nearLow: isNearLowThreshold,
+      nearHigh: isNearHighThreshold,
+      currentTick,
+      lowThreshold,
+      highThreshold
+    };
+  }, [calculateRangeThresholds]);
+
+  // Trigger alarm for dangerous positions
+  const triggerAlarm = useCallback((position: Position, dangerInfo: any) => {
+    const alarmKey = `${position.id}-${dangerInfo.currentTick}`;
+    
+    if (alarmState.acknowledgedAlarms.has(alarmKey)) {
+      return; // This specific alarm has been acknowledged
+    }
+
+    setAlarmState(prev => ({ ...prev, isActive: true }));
+    setLastAlarmTime(new Date());
+    
+    // Start audio alarm
+    createAlarmSound();
+    
+    // Show notification
+    showNotification(position, dangerInfo);
+    
+    // Flash the page title
+    let titleFlashInterval: NodeJS.Timeout;
+    const originalTitle = document.title;
+    let isFlashing = true;
+    
+    titleFlashInterval = setInterval(() => {
+      document.title = isFlashing ? '🚨 POSITION ALERT! 🚨' : originalTitle;
+      isFlashing = !isFlashing;
+    }, 1000);
+    
+    // Stop title flashing after 30 seconds
+    setTimeout(() => {
+      clearInterval(titleFlashInterval);
+      document.title = originalTitle;
+    }, 30000);
+    
+  }, [alarmState.acknowledgedAlarms, createAlarmSound, showNotification]);
+
+  // Acknowledge alarm
+  const acknowledgeAlarm = useCallback((position?: Position, dangerInfo?: any) => {
+    stopAlarmSound();
+    setAlarmState(prev => {
+      const newAcknowledged = new Set(prev.acknowledgedAlarms);
+      if (position && dangerInfo) {
+        const alarmKey = `${position.id}-${dangerInfo.currentTick}`;
+        newAcknowledged.add(alarmKey);
+      }
+      return {
+        ...prev,
+        isActive: false,
+        acknowledgedAlarms: newAcknowledged
+      };
+    });
+  }, [stopAlarmSound]);
+
+  // Monitor positions for dangers
+  const monitorPositions = useCallback(() => {
+    if (!selectedPosition || !isMonitoring) return;
+
+    selectedPosition.forEach(position => {
+      const dangerInfo = checkDangerousPosition(position);
+      if (dangerInfo.isDangerous) {
+        triggerAlarm(position, dangerInfo);
+      }
+    });
+  }, [selectedPosition, isMonitoring, checkDangerousPosition, triggerAlarm]);
+
+  // Start/stop monitoring
+  const toggleMonitoring = useCallback(() => {
+    if (isMonitoring) {
+      if (monitoringIntervalRef.current) {
+        clearInterval(monitoringIntervalRef.current);
+        monitoringIntervalRef.current = null;
+      }
+      stopAlarmSound();
+      setIsMonitoring(false);
+    } else {
+      // Start monitoring every 10 seconds
+      monitoringIntervalRef.current = setInterval(monitorPositions, 10000);
+      setIsMonitoring(true);
+      // Check immediately
+      monitorPositions();
+    }
+  }, [isMonitoring, monitorPositions, stopAlarmSound]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    let delayId: ReturnType<typeof setTimeout> | null = null;
+    
+    async function fetchData() {
+      try {
+        setError(null);
+
+        await new Promise<void>((resolve) => {
+          delayId = setTimeout(resolve, 3000);
+        });
+
+        const response = await fetch('/api/position');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        if (isCancelled) return;
+
+        const freshPositions = result.positions;
+        const addressesWithPositions = Object.keys(freshPositions || {})
+          .filter(address => freshPositions[address] && freshPositions[address].length > 0);
+
+        const positions = freshPositions[walletAddress];
+        
+        if (positions && positions.length > 0) {
+          setSelectedPosition(positions);
+        } else {
+          setError('No positions found for this wallet address');
+          setSelectedPosition(null);
+        }
+
+        setPoolInfo(freshPositions);
+        setAddressesWithPositions(addressesWithPositions);
+        
+        if (addressesWithPositions.length > 0 && !selectedAddress) {
+          setSelectedAddress(addressesWithPositions[0]);
+        }
+        
+      } catch (error) {
+        if (!isCancelled) {
+          if (typeof error === 'object' && error !== null && 'message' in error) {
+            setError((error as { message?: string }).message || 'Failed to fetch pool information');
+          } else {
+            setError('Failed to fetch pool information');
+          }
+        }
+      } finally {
+        if (!isCancelled) {
+          setLoading(false);
+          if (delayId) clearTimeout(delayId);
+        }
+      }
+    }
+
+    fetchData();
+    return () => { isCancelled = true; };
+  }, [poolInfo]);
+
+  // Initialize audio on component mount
+  useEffect(() => {
+    initializeAudio();
+    requestNotificationPermission();
+    
+    return () => {
+      stopAlarmSound();
+      if (monitoringIntervalRef.current) {
+        clearInterval(monitoringIntervalRef.current);
+      }
+    };
+  }, [initializeAudio, requestNotificationPermission, stopAlarmSound]);
+
+  // Monitor positions when they change
+  useEffect(() => {
+    if (isMonitoring && selectedPosition) {
+      monitorPositions();
+    }
+  }, [selectedPosition, isMonitoring, monitorPositions]);
 
   const handleWalletSubmit = async () => {
     if (!walletAddress.trim()) return;
 
     try {
-      // setLoading(true);
       setError(null);
       const positions = poolInfo[walletAddress];
       
@@ -149,48 +446,12 @@ export default function Page() {
     }
   };
 
-  // New function to calculate range thresholds
-  const calculateRangeThresholds = (position: Position) => {
-    const tickUpper = Number(position.tickUpper?.tickIdx || 0);
-    const tickLower = Number(position.tickLower?.tickIdx || 0);
-    const tickRange = tickUpper - tickLower;
-    
-    const lowThreshold = tickLower + (tickRange * lowRangePercent / 100);
-    const highThreshold = tickLower + (tickRange * highRangePercent / 100);
-    
-    return { 
-      lowThreshold: Math.round(lowThreshold), 
-      highThreshold: Math.round(highThreshold),
-      tickRange 
-    };
-  };
-
-  // New function to check if position is dangerous
-  const checkDangerousPosition = (position: Position) => {
-    const currentTick = Number(position.pool?.tick || 0);
-    const { lowThreshold, highThreshold } = calculateRangeThresholds(position);
-    
-    // Check if current tick is very close to thresholds (within 50 ticks tolerance)
-    const tolerance = 0;
-    const isNearLowThreshold = (currentTick - lowThreshold) <= tolerance;
-    const isNearHighThreshold = (currentTick - highThreshold) >= tolerance;
-    
-    return {
-      isDangerous: isNearLowThreshold || isNearHighThreshold,
-      nearLow: isNearLowThreshold,
-      nearHigh: isNearHighThreshold,
-      currentTick,
-      lowThreshold,
-      highThreshold
-    };
-  };
-
   const formatNumber = (value: string | number, decimals = 6) => {
     const num = typeof value === 'string' ? parseFloat(value) : value;
     return num.toFixed(decimals);
   };
 
-  const formatCurrency = (value: string | number,) => {
+  const formatCurrency = (value: string | number) => {
     const num = typeof value === 'string' ? parseFloat(value) : value;
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -203,9 +464,7 @@ export default function Page() {
   const formatETHCurrency = (value: string | number, value1: string | number) => {
     const num = typeof value === 'string' ? parseFloat(value) : value;
     const num1 = typeof value1 === 'string' ? parseFloat(value1) : value1;
-    console.log(num, num1)
     const result = num/num1;
-    console.log(num, num1, result)
     return result.toFixed(3);
   };
   
@@ -220,7 +479,6 @@ export default function Page() {
     
     const minTick = Math.min(tickLower, currentTick);
     const maxTick = Math.max(tickUpper, currentTick);
-    const range = maxTick - minTick;
     
     const chartStart = minTick;
     const chartEnd = maxTick;
@@ -249,7 +507,6 @@ export default function Page() {
     return data.sort((a, b) => a.tick - b.tick);
   };
 
-
   if (loading) {
     return (
         <div className="p-6 max-w-6xl mx-auto py-30">
@@ -259,9 +516,9 @@ export default function Page() {
             </div>
         </div>
     );
-}
+  }
 
-if (error) {
+  if (error) {
     return (
         <div className="p-6 max-w-6xl mx-auto py-30">
             <div className="bg-red-50 border border-red-200 rounded-md p-4">
@@ -274,13 +531,105 @@ if (error) {
             </div>
         </div>
     );
-}
+  }
 
   return(
     <div className="p-6 max-w-6xl mx-auto py-30">
       <div className="mb-8 text-center p-2">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Pool Position Analyzer</h1>
-        <p className="text-gray-600">Enter your wallet address to view your Uniswap V3 positions</p>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Pool Position Analyzer with Alarm System</h1>
+        <p className="text-gray-600">Monitor your Uniswap V3 positions with real-time alerts and wake-up alarms</p>
+      </div>
+
+      {/* Alarm Control Panel */}
+      <div className="mb-8 bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-lg p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <AlertTriangle className="h-5 w-5 text-red-500" />
+          Alarm System Control
+        </h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          {/* Monitoring Toggle */}
+          <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
+            <span className="text-sm text-green-700 font-medium">Monitoring</span>
+            <button
+              onClick={toggleMonitoring}
+              className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                isMonitoring 
+                  ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {isMonitoring ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+              {isMonitoring ? 'ON' : 'OFF'}
+            </button>
+          </div>
+
+          {/* Sound Toggle */}
+          <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
+            <span className="text-sm text-blue-700 font-medium">Sound</span>
+            <button
+              onClick={() => setAlarmState(prev => ({ ...prev, soundEnabled: !prev.soundEnabled }))}
+              className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                alarmState.soundEnabled 
+                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {alarmState.soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+              {alarmState.soundEnabled ? 'ON' : 'OFF'}
+            </button>
+          </div>
+
+          {/* Volume Control */}
+          <div className="p-3 bg-white rounded-lg border">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Volume</label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.1"
+              value={alarmState.alarmVolume}
+              onChange={(e) => setAlarmState(prev => ({ ...prev, alarmVolume: parseFloat(e.target.value) }))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+
+          {/* Alarm Status */}
+          <div className="p-3 bg-white rounded-lg border">
+            <div className="text-sm font-medium text-gray-700">Status</div>
+            <div className={`text-sm font-bold ${alarmState.isActive ? 'text-red-600' : 'text-green-600'}`}>
+              {alarmState.isActive ? '🚨 ALARM ACTIVE!' : '✅ All Clear'}
+            </div>
+          </div>
+        </div>
+
+        {/* Acknowledge Alarm Button */}
+        {alarmState.isActive && (
+          <div className="bg-red-100 border border-red-300 rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-red-800 animate-pulse">🚨 ALARM ACTIVE!</h3>
+                <p className="text-red-700">Your position is in danger. Check immediately!</p>
+                {lastAlarmTime && (
+                  <p className="text-red-600 text-sm">Last triggered: {lastAlarmTime.toLocaleString()}</p>
+                )}
+              </div>
+              <button
+                onClick={() => acknowledgeAlarm()}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors"
+              >
+                ACKNOWLEDGE ALARM
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isMonitoring && (
+          <div className="text-sm text-gray-600 bg-white p-3 rounded-lg border">
+            <strong>Monitoring Active:</strong> Checking positions every 10 seconds for dangerous conditions.
+            Alarms will sound and notifications will appear when positions approach thresholds.
+          </div>
+        )}
       </div>
 
       {/* Range Configuration Section */}
@@ -326,14 +675,6 @@ if (error) {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Wallet Address
             </label>
-            {/* <input
-              type="text"
-              value={walletAddress}
-              onChange={(e) => setWalletAddress(e.target.value)}
-              placeholder="Enter your wallet address..."
-              className="w-full text-gray-500 px-3 py-2 border bg-gray-100 border-gray-400 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={loading}
-            /> */}
             <select
               id="wallet-select"
               value={walletAddress}
@@ -370,24 +711,38 @@ if (error) {
         
         return (
           <div key={index} className="space-y-6 mb-8">
-            {/* Danger Alert */}
+            {/* Enhanced Danger Alert */}
             {dangerAlert.isDangerous && (
-              <div className="bg-red-100 border-l-4 border-red-500 p-4 rounded-md">
-                <div className="flex items-center">
-                  <div className="text-red-500 text-2xl mr-3">⚠️</div>
-                  <div>
-                    <h3 className="text-lg font-bold text-red-800">Dangerous  {position.token0?.symbol} / {position.token1?.symbol} Position Alert!</h3>
-                    <p className="text-red-700">
-                      Current tick ({dangerAlert.currentTick}) is very close to your{' '}
-                      {dangerAlert.nearLow && 'low'}{dangerAlert.nearLow && dangerAlert.nearHigh && ' and '}
-                      {dangerAlert.nearHigh && 'high'} threshold
-                      {dangerAlert.nearLow && ` (${lowThreshold})`}
-                      {dangerAlert.nearHigh && ` (${highThreshold})`}.
-                    </p>
-                    <p className="text-red-600 text-sm mt-1">
-                      Consider adjusting your position or monitoring closely for potential out-of-range scenarios.
-                    </p>
+              <div className={`border-l-4 p-4 rounded-md ${alarmState.isActive ? 'bg-red-200 border-red-600 animate-pulse' : 'bg-red-100 border-red-500'}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <div className="text-red-500 text-2xl mr-3">⚠️</div>
+                    <div>
+                      <h3 className="text-lg font-bold text-red-800">
+                        {alarmState.isActive ? '🚨 ALARM: ' : ''}
+                        Dangerous {position.token0?.symbol} / {position.token1?.symbol} Position Alert!
+                      </h3>
+                      <p className="text-red-700">
+                        Current tick ({dangerAlert.currentTick}) is very close to your{' '}
+                        {dangerAlert.nearLow && 'low'}{dangerAlert.nearLow && dangerAlert.nearHigh && ' and '}
+                        {dangerAlert.nearHigh && 'high'} threshold
+                        {dangerAlert.nearLow && ` (${lowThreshold})`}
+                        {dangerAlert.nearHigh && ` (${highThreshold})`}.
+                      </p>
+                      <p className="text-red-600 text-sm mt-1">
+                        {alarmState.isActive ? 'IMMEDIATE ACTION REQUIRED! ' : ''}
+                        Consider adjusting your position or monitoring closely for potential out-of-range scenarios.
+                      </p>
+                    </div>
                   </div>
+                  {dangerAlert.isDangerous && (
+                    <button
+                      onClick={() => acknowledgeAlarm(position, dangerAlert)}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors ml-4"
+                    >
+                      ACKNOWLEDGE
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -405,12 +760,19 @@ if (error) {
                     Alert Thresholds: {lowThreshold} - {highThreshold} (Range: {tickRange})
                   </p>
                 </div>
-                <button 
-                  className="text-gray-100 cursor-pointer bg-blue-500 px-3 py-1 rounded hover:bg-blue-300" 
-                  onClick={() => setShowStatus(!showStatus)}
-                >
-                  {showStatus ? 'Hide' : 'More'}
-                </button>
+                <div className="flex items-center gap-2">
+                  {dangerAlert.isDangerous && (
+                    <div className="text-red-500 animate-bounce">
+                      <AlertTriangle className="h-6 w-6" />
+                    </div>
+                  )}
+                  <button 
+                    className="text-gray-100 cursor-pointer bg-blue-500 px-3 py-1 rounded hover:bg-blue-300" 
+                    onClick={() => setShowStatus(!showStatus)}
+                  >
+                    {showStatus ? 'Hide' : 'More'}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -436,21 +798,6 @@ if (error) {
                     <p>Upper: {position.tickUpper?.tickIdx}</p>
                   </div>
                 </div>
-
-                {/* Prices */}
-                {/* <div className="space-y-2">
-                  <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Token Prices</h3>
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-500">
-                      <span className="font-medium text-gray-500">{position.token0?.symbol}:</span>{' '}
-                      {formatNumber(position.pool?.token0Price || '0', 4)} {position.token1?.symbol}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      <span className="font-medium text-gray-500">{position.token1?.symbol}:</span>{' '}
-                      {formatNumber(position.pool?.token1Price || '0', 8)} {position.token0?.symbol}
-                    </p>
-                  </div>
-                </div> */}
 
                 {/* Position Amounts */}
                 <div className="space-y-2">
@@ -487,6 +834,24 @@ if (error) {
                   <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Position Value</h3>
                   <p className="text-2xl font-bold text-green-600">
                     {formatCurrency(position.usdValue?.totalValue || '0')}/{formatETHCurrency(position.usdValue?.totalValue || '0', position.usdValue?.token1Price || '0')}{position.token1?.symbol}
+                  </p>
+                </div>
+
+                {/* Risk Status */}
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Risk Status</h3>
+                  <div className={`px-3 py-2 rounded-lg text-center font-medium ${
+                    dangerAlert.isDangerous 
+                      ? 'bg-red-100 text-red-800 border border-red-200' 
+                      : 'bg-green-100 text-green-800 border border-green-200'
+                  }`}>
+                    {dangerAlert.isDangerous ? '🚨 HIGH RISK' : '✅ SAFE'}
+                  </div>
+                  <p className="text-xs text-gray-500 text-center">
+                    Distance to threshold: {Math.min(
+                      Math.abs(dangerAlert.currentTick - dangerAlert.lowThreshold),
+                      Math.abs(dangerAlert.currentTick - dangerAlert.highThreshold)
+                    )} ticks
                   </p>
                 </div>
               </div>
@@ -596,7 +961,7 @@ if (error) {
           </div>
         );
       })}
-
+      
     </div>
   );
 }
